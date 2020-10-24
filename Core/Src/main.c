@@ -24,6 +24,8 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "TDA7719.h"
+#include "ssd1306.h"
+//#include "string.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -33,6 +35,7 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
+#define DISPLAY 1
 #define ADC_BUF_SIZE 6
 /* USER CODE END PD */
 
@@ -80,6 +83,120 @@ static void MX_TIM3_Init(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+
+GPIO_PinState state_3v3 = GPIO_PIN_SET;
+GPIO_PinState charger_plugged = GPIO_PIN_SET;
+const int GAIN = 4;
+const int BASS = 3;
+const int MIDDLE = 2;
+const int TREBLE = 1;
+const int PACK = 5;
+const int GAIN_STEPS = 4096/30;
+const int GAIN_HYST = 30;
+// Faktor aus Debug Wert, und Messung mit Multimeter bestimmt; Stimmt auf 10mV mit Fluke Multimeter überein
+const double PACK_FAKTOR = 14.86 / 1698.0;
+const double PACK_LOW = 14.0;
+const double PACK_FULL = 16.6;
+const double PACK_HYST = 0.1;
+static int pack_sense = 0;
+static int pack_val = 0;
+static double pack_voltage_buf[5] = {0,0,0,0,0};
+static int buf_index = 0;
+static double pack_voltage = 0.0;
+static int pack_low = 1;
+static int pack_full = 0;
+static int power_rise = 0;
+static int dsp_delay = 0;
+static int FAIL = 0;
+
+static int old_gain=0, old_bass = 0, old_middle=0, old_treble=0;
+static int gain = 0, bass = 0, middle = 0, treble = 0;
+
+static int splash_sceen = 0;
+
+static int write_bat = 0;
+
+void write_screen(int bass, int middle, int treble, double battery){
+
+#if DISPLAY == 1
+	char s[7];
+	int vorkomma = 0, nachkomma = 0;
+	ssd1306_Fill(Black);
+	ssd1306_SetCursor(0, 0);
+	ssd1306_WriteString("GurkiBox   V03", Font_6x8, White);
+	//bass
+	if(state_3v3 == GPIO_PIN_RESET){
+		ssd1306_SetCursor(0, 10);
+		ssd1306_WriteString("Bass:", Font_6x8, White);
+		ssd1306_SetCursor(64, 10);
+		itoa((int16_t)(bass-15), s, 10);
+		if(bass>15)ssd1306_WriteString("+", Font_6x8, White);
+		ssd1306_WriteString(s, Font_6x8, White);
+		ssd1306_WriteString("bB", Font_6x8, White);
+		//Middle
+		ssd1306_SetCursor(0, 20);
+		ssd1306_WriteString("Middle:", Font_6x8, White);
+		ssd1306_SetCursor(64, 20);
+		itoa((int16_t)(middle-15), s, 10);
+		if(middle>15)ssd1306_WriteString("+", Font_6x8, White);
+		ssd1306_WriteString(s, Font_6x8, White);
+		ssd1306_WriteString("bB", Font_6x8, White);
+		// Treble
+		ssd1306_SetCursor(0, 30);
+		ssd1306_WriteString("Treble:", Font_6x8, White);
+		ssd1306_SetCursor(64, 30);
+		itoa((int16_t)(treble-15), s, 10);
+		if(treble>15)ssd1306_WriteString("+", Font_6x8, White);
+		ssd1306_WriteString(s, Font_6x8, White);
+		ssd1306_WriteString("bB", Font_6x8, White);
+	}
+	// Battery
+	vorkomma=(int)battery;
+	nachkomma = (int)((battery-((double)vorkomma))*100);
+	ssd1306_SetCursor(0, 40);
+	ssd1306_WriteString("Akku:", Font_6x8, White);
+	ssd1306_SetCursor(64, 40);
+	itoa((int16_t)vorkomma, s, 10);
+	ssd1306_WriteString(s, Font_6x8, White);
+	ssd1306_WriteString(".", Font_6x8, White);
+	itoa((int16_t)nachkomma, s, 10);
+	ssd1306_WriteString(s, Font_6x8, White);
+	ssd1306_WriteString("V", Font_6x8, White);
+
+	if(charger_plugged == GPIO_PIN_RESET){
+		uint8_t x = 110, y = 0;
+		//Linker Ramen Akku
+		ssd1306_Line(x,y,x,y+6, White);
+		ssd1306_Line(x,y,x+3,y, White);
+		ssd1306_Line(x,y+6,x+3,y+6, White);
+
+		//Rechter Ramen Akku
+		ssd1306_Line(x+9,y,x+11,y, White);
+		ssd1306_Line(x+9,y+6,x+11,y+6, White);
+		ssd1306_Line(x+11,y,x+11,y+6, White);
+		ssd1306_Line(x+12,y+2,x+12,y+4, White);
+		//Strom Symbol
+		if(pack_full == 0){
+			ssd1306_Line(x+6,y,x+4,y+2, White);
+			ssd1306_Line(x+7,y+4,x+5,y+6, White);
+			ssd1306_Line(x+4,y+3,x+7,y+3, White);
+			ssd1306_DrawPixel(x+5,y+2,White);
+			ssd1306_DrawPixel(x+6,y+4,White);
+		}
+		else{
+			ssd1306_Line(x+2,y,x+9,y, White);
+			ssd1306_Line(x+2,y+1,x+9,y+1, White);
+			ssd1306_Line(x+2,y+2,x+9,y+2, White);
+			ssd1306_Line(x+2,y+3,x+9,y+3, White);
+			ssd1306_Line(x+2,y+4,x+9,y+4, White);
+			ssd1306_Line(x+2,y+5,x+9,y+5, White);
+			ssd1306_Line(x+2,y+6,x+9,y+6, White);
+		}
+	}
+
+	ssd1306_UpdateScreen();
+#endif
+}
 
 
 /* USER CODE END 0 */
@@ -136,28 +253,29 @@ int main(void)
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
 
-  // Endstufe einschalten
-  HAL_GPIO_WritePin(MUTE_AMP1_GPIO_Port,MUTE_AMP1_Pin, GPIO_PIN_RESET);	// Mute eingeschaltet für tests
-  HAL_GPIO_WritePin(STBY_AMP1_GPIO_Port,STBY_AMP1_Pin, GPIO_PIN_SET);
-  HAL_GPIO_WritePin(MUTE_AMP2_GPIO_Port,MUTE_AMP2_Pin, GPIO_PIN_RESET);	// Mute eingeschaltet für tests
-  HAL_GPIO_WritePin(STBY_AMP2_GPIO_Port,STBY_AMP2_Pin, GPIO_PIN_SET);
+  // Endstufe initial deaktiviert
+  HAL_GPIO_WritePin(MUTE_AMP1_GPIO_Port,MUTE_AMP1_Pin, GPIO_PIN_SET);
+  HAL_GPIO_WritePin(STBY_AMP1_GPIO_Port,STBY_AMP1_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(MUTE_AMP2_GPIO_Port,MUTE_AMP2_Pin, GPIO_PIN_SET);
+  HAL_GPIO_WritePin(STBY_AMP2_GPIO_Port,STBY_AMP2_Pin, GPIO_PIN_RESET);
+  //HAL_GPIO_WritePin(STEPUP_DISABLE_GPIO_Port, STEPUP_DISABLE_Pin, GPIO_PIN_SET);
 
   GPIO_PinState state;
   uint8_t test = 0;
   uint8_t adresses[5] = {0,0,0,0,0};
 
-/*
- * I2C Scan
+
+// I2C Scan
 	HAL_StatusTypeDef result;
-	i = 0;
+	int i = 0;
 	for (i=1; i<128; i++)
 	{
 
-	   * the HAL wants a left aligned i2c address
-	   * &hi2c1 is the handle
-	   * (uint16_t)(i<<1) is the i2c address left aligned
-	   * retries 2
-	   * timeout 2
+	   //the HAL wants a left aligned i2c address
+	   //&hi2c1 is the handle
+	   //(uint16_t)(i<<1) is the i2c address left aligned
+	   //retries 2
+	   //timeout 2
 
 	  result = HAL_I2C_IsDeviceReady(&hi2c1, (uint16_t)(i<<1), 2, 2);
 	  if (result != HAL_OK) // HAL_ERROR or HAL_BUSY or HAL_TIMEOUT
@@ -170,140 +288,66 @@ int main(void)
 		  test++;
 	  }
 	}
-*/
-/*
-#define TDA_ADDR (0x44<<1)
-  char data[2] = {0,0};
-  HAL_StatusTypeDef ret;
-  	  // MAIN Soure
-  	  data[0] = 0;
-  	  data[1]= 0b11100011;	// CFG7 // IN3
-  	  ret = HAL_I2C_Master_Transmit(&hi2c1, TDA_ADDR, &data, 2, 1000);
-  	  //ret = HAL_I2C_Master_Transmit(&hi2c1, );
-  	  if(ret != HAL_OK)
-		  Error_Handler();
 
-  	  // Second Source
-  	  data[0] = 1; data[1]= 0b11111011;	// CFG7 // IN3
-  	  ret = HAL_I2C_Master_Transmit(&hi2c1, TDA_ADDR, &data, 2, 1000);
-  	  if(ret != HAL_OK)
-		  Error_Handler();
-  	  // MIX
-  	  data[0] = 2; data[1]= 0b11111111;
-  	  ret = HAL_I2C_Master_Transmit(&hi2c1, TDA_ADDR, &data, 2, 1000);
-  	  if(ret != HAL_OK)
-		  Error_Handler();
-  	  // MIX Control
-  	  data[0] = 3; data[1]= 0b00111111;
-  	  ret = HAL_I2C_Master_Transmit(&hi2c1, TDA_ADDR, &data, 2, 1000);
-  	  if(ret != HAL_OK)
-		  Error_Handler();
-  	  // Soft mute
-  	  data[0] = 4; data[1]= 0b11010011;
-  	  ret = HAL_I2C_Master_Transmit(&hi2c1, TDA_ADDR, &data, 2, 1000);
-  	  if(ret != HAL_OK)
-		  Error_Handler();
-  	  // Loudness Softstep
-  	  data[0] = 5; data[1]= 0b11111111;
-  	  ret = HAL_I2C_Master_Transmit(&hi2c1, TDA_ADDR, &data, 2, 1000);
-  	  if(ret != HAL_OK)
-		  Error_Handler();
-  	  // Loudness Softstep 2
-  	  data[0] = 6; data[1]= 0b11001111;
-  	  ret = HAL_I2C_Master_Transmit(&hi2c1, TDA_ADDR, &data, 2, 1000);
-  	  if(ret != HAL_OK)
-		  Error_Handler();
-  	  // Loudness
-  	  data[0] = 7; data[1]= 0b11110000;
-  	  ret = HAL_I2C_Master_Transmit(&hi2c1, TDA_ADDR, &data, 2, 1000);
-  	  if(ret != HAL_OK)
-		  Error_Handler();
-  	  // Volume Output Gain
-  	  data[0] = 8; data[1]= 0b11011111;
-  	  ret = HAL_I2C_Master_Transmit(&hi2c1, TDA_ADDR, &data, 2, 1000);
-  	  if(ret != HAL_OK)
-		  Error_Handler();
-  	  // Treble Filter
-  	  data[0] = 9; data[1]= 0b11111111;
-  	  ret = HAL_I2C_Master_Transmit(&hi2c1, TDA_ADDR, &data, 2, 1000);
-  	  if(ret != HAL_OK)
-		  Error_Handler();
-  	  // Midle Filter
-  	  data[0] = 10; data[1]= 0b11111111;
-  	  ret = HAL_I2C_Master_Transmit(&hi2c1, TDA_ADDR, &data, 2, 1000);
-  	  if(ret != HAL_OK)
-		  Error_Handler();
-  	  // Bass Filter
-  	  data[0] = 11; data[1]= 0b11110000;
-  	  ret = HAL_I2C_Master_Transmit(&hi2c1, TDA_ADDR, &data, 2, 1000);
-  	  if(ret != HAL_OK)
-		  Error_Handler();
-  	  // Subwoofer middle bass
-  	  data[0] = 12; data[1]= 0b11111111;
-  	  ret = HAL_I2C_Master_Transmit(&hi2c1, TDA_ADDR, &data, 2, 1000);
-  	  if(ret != HAL_OK)
-		  Error_Handler();
-  	  // Speaker Attenuation LF
-  	  data[0] = 13; data[1]= 0b00000000;
-  	  ret = HAL_I2C_Master_Transmit(&hi2c1, TDA_ADDR, &data, 2, 1000);
-  	  if(ret != HAL_OK)
-		  Error_Handler();
-  	// Speaker Attenuation RF
-  	  data[0] = 14; data[1]= 0b00000000;
-  	  ret = HAL_I2C_Master_Transmit(&hi2c1, TDA_ADDR, &data, 2, 1000);
-  	  if(ret != HAL_OK)
-		  Error_Handler();
-  	// Speaker Attenuation LR
-  	  data[0] = 15; data[1]= 0b00000000;
-  	  ret = HAL_I2C_Master_Transmit(&hi2c1, TDA_ADDR, &data, 2, 1000);
-  	  if(ret != HAL_OK)
-		  Error_Handler();
-  	// Speaker Attenuation RR
-  	  data[0] = 16; data[1]= 0b00000000;
-  	  ret = HAL_I2C_Master_Transmit(&hi2c1, TDA_ADDR, &data, 2, 1000);
-  	  if(ret != HAL_OK)
-		  Error_Handler();
-  	  // Sub attenuation
-  	  data[0] = 17; data[1]= 0b00000000;
-  	  ret = HAL_I2C_Master_Transmit(&hi2c1, TDA_ADDR, &data, 2, 1000);
-  	  if(ret != HAL_OK)
-		  Error_Handler();
-  	  // Test Audioprecessor
-  	  //data[0] = 18; data[1]= 0b00010000;
-  	  //ret = HAL_I2C_Master_Transmit(&hi2c1, TDA_ADDR, &data, 2, 1000);
-  	  //if(ret != HAL_OK)
-  	  //Error_Handler();
+#if DISPLAY == 1
+  	  ssd1306_Init();
+  	  ssd1306_Fill(Black);
+  	  ssd1306_SetCursor(0, 20);
+  	  ssd1306_WriteString("Moin Digga!", Font_6x8, White);
+  	  ssd1306_UpdateScreen();
+#endif
 
-*/
 
-  	  const int GAIN = 4;
-  	  const int BASS = 3;
-  	  const int MIDDLE = 2;
-  	  const int TREBLE = 1;
-  	  const int PACK = 5;
-  	  // Faktor aus Debug Wert, und Messung mit Multimeter bestimmt; Stimmt auf 10mV mit Fluke Multimeter überein
-  	  const double PACK_FAKTOR = 14.86 / 1698.0;
-  	  const double PACK_LOW = 13.5;
-  	  const double PACK_FULL = 16.8;
-  	  const double PACK_HYST = 0.1;
-  	  static int pack_sense = 0;
-  	  static int pack_val = 0;
-  	  static double pack_voltage_buf[5] = {0,0,0,0,0};
-  	  static int buf_index = 0;
-  	  static double pack_voltage = 0.0;
-  	  static int pack_low = 1;
-  	  static int pack_full = 0;
-  	  static int power_rise = 0;
-  	  static int dsp_delay = 0;
-  	  static int FAIL = 0;
+
 
   while (1)
   {
-	  if(adc_flag == 1){
-		  if( FAIL == 0)
-			  HAL_GPIO_TogglePin(STATUS_LED_GPIO_Port, STATUS_LED_Pin);
-		  else if(FAIL == 1)
+	  // Alles abschalten, wenn eine Endstufe in Störung geht. Fehler am Display anzeigen
+	  if((HAL_GPIO_ReadPin(DIAG_AMP1_GPIO_Port, DIAG_AMP1_Pin) == GPIO_PIN_RESET) ||
+			  (HAL_GPIO_ReadPin(DIAG_AMP2_GPIO_Port, DIAG_AMP2_Pin) == GPIO_PIN_RESET) ||
+			  (HAL_GPIO_ReadPin(BT_FAULT_GPIO_Port, BT_FAULT_Pin) == GPIO_PIN_RESET)){
+		  // Endstufen abschalten
+		  HAL_GPIO_WritePin(MUTE_AMP1_GPIO_Port,MUTE_AMP1_Pin, GPIO_PIN_SET);
+		  HAL_GPIO_WritePin(STBY_AMP1_GPIO_Port,STBY_AMP1_Pin, GPIO_PIN_RESET);
+		  HAL_GPIO_WritePin(MUTE_AMP2_GPIO_Port,MUTE_AMP2_Pin, GPIO_PIN_SET);
+		  HAL_GPIO_WritePin(STBY_AMP2_GPIO_Port,STBY_AMP2_Pin, GPIO_PIN_RESET);
+		  // Power abschalten
+		  HAL_GPIO_WritePin(POWER_GPIO_Port,POWER_Pin, GPIO_PIN_RESET);
+		  HAL_GPIO_WritePin(ENABLE_9V_GPIO_Port,ENABLE_9V_Pin, GPIO_PIN_RESET);
+		  HAL_GPIO_WritePin(BT_EN_GPIO_Port,BT_EN_Pin, GPIO_PIN_RESET);
+#if DISPLAY == 1
+			char s[7];
+			int vorkomma = 0, nachkomma = 0;
+			ssd1306_Fill(Black);
+			ssd1306_SetCursor(0, 0);
+			ssd1306_WriteString("GurkiBox   V03", Font_6x8, White);
+			//bass
+			if((HAL_GPIO_ReadPin(DIAG_AMP1_GPIO_Port, DIAG_AMP1_Pin) == GPIO_PIN_RESET)){
+				ssd1306_SetCursor(0, 10);
+				ssd1306_WriteString("Error Amp1", Font_6x8, White);
+			}
+			if((HAL_GPIO_ReadPin(DIAG_AMP2_GPIO_Port, DIAG_AMP2_Pin) == GPIO_PIN_RESET)){
+				ssd1306_SetCursor(0, 10);
+				ssd1306_WriteString("Error Amp2", Font_6x8, White);
+			}
+			if((HAL_GPIO_ReadPin(BT_FAULT_GPIO_Port, BT_FAULT_Pin) == GPIO_PIN_RESET)){
+				ssd1306_SetCursor(0, 10);
+				ssd1306_WriteString("Error ", Font_6x8, White);
+				ssd1306_SetCursor(0, 20);
+				ssd1306_WriteString("Bluetooth ", Font_6x8, White);
+			}
+			ssd1306_UpdateScreen();
+#endif
+		  while(1){
 			  HAL_GPIO_WritePin(STATUS_LED_GPIO_Port, STATUS_LED_Pin, GPIO_PIN_SET);
+			  ;
+		  }
+	  }
+
+
+	  if(adc_flag == 1){
+		  // Run LED
+		  HAL_GPIO_TogglePin(STATUS_LED_GPIO_Port, STATUS_LED_Pin);
 
 		  if(HAL_ADC_Start_DMA(&hadc, &ADC_buffer, ADC_BUF_SIZE) != HAL_OK)
 			  Error_Handler();
@@ -312,6 +356,9 @@ int main(void)
 			  Error_Handler();
 		  adc_flag = 0;
 		  //TDA7719_begin(hi2c1);
+
+		  // Überprüfen, ob Ladeadapter eingesteckt
+		  charger_plugged = HAL_GPIO_ReadPin(CHARGER_PLUGGED_GPIO_Port, CHARGER_PLUGGED_Pin);
 
 		  // Akku Spannung überwachen
 		  if(HAL_GPIO_ReadPin(EN_PACK_SENSE_GPIO_Port,EN_PACK_SENSE_Pin) == GPIO_PIN_SET){
@@ -327,6 +374,12 @@ int main(void)
 		  }
 		  pack_sense++;
 		  HAL_GPIO_WritePin(EN_PACK_SENSE_GPIO_Port,EN_PACK_SENSE_Pin , ((pack_sense%10) == 0));
+		  write_bat++;
+#if DISPLAY == 1
+		  if((write_bat % 1000)  == 0)
+			  write_screen(bass, middle, treble, pack_voltage);
+#endif
+
 
 		  // Charger abschalten, wenn Spannung überschritten wird
 		  pack_full = pack_voltage > (PACK_FULL + (PACK_HYST*2)) ? 1 : pack_voltage < (PACK_FULL - (PACK_HYST*2)) ? 0 : pack_full;
@@ -335,30 +388,85 @@ int main(void)
 
 		  // Versorgungsspannung schalten
 		  pack_low = (pack_voltage > (PACK_LOW + PACK_HYST)) ? 0 : (pack_voltage < PACK_LOW) ? 1 : pack_low;
-		  GPIO_PinState state_3v3;
+
 		  state_3v3 = HAL_GPIO_ReadPin(U3V3_ENABLED_GPIO_Port, U3V3_ENABLED_Pin);
-		  HAL_GPIO_WritePin(POWER_GPIO_Port,POWER_Pin, (state_3v3 == GPIO_PIN_RESET) && (pack_low == 0));
-
-
+		  int power_on = (state_3v3 == GPIO_PIN_RESET) && (pack_low == 0);
+		  HAL_GPIO_WritePin(POWER_GPIO_Port,POWER_Pin, power_on);
 
 		  // Versorgungsspannung für Audio-DSP einschalten
-		  HAL_GPIO_WritePin(ENABLE_9V_GPIO_Port,ENABLE_9V_Pin, HAL_GPIO_ReadPin(POWER_GPIO_Port,POWER_Pin));
+		  HAL_GPIO_WritePin(ENABLE_9V_GPIO_Port,ENABLE_9V_Pin, power_on);
 		  // Bluetooth Modul einschalten
-		  HAL_GPIO_WritePin(BT_EN_GPIO_Port,BT_EN_Pin, HAL_GPIO_ReadPin(POWER_GPIO_Port,POWER_Pin));
+		  HAL_GPIO_WritePin(BT_EN_GPIO_Port,BT_EN_Pin, power_on);
+
 
 		  // DSP initialisieren
 		  if(power_rise < HAL_GPIO_ReadPin(POWER_GPIO_Port,POWER_Pin)){
+#if DISPLAY == 1
+			  write_screen(bass, middle, treble, pack_voltage);
+#endif
 			  dsp_delay++;
 		  }
 		  dsp_delay = dsp_delay == 0 ? 0 : dsp_delay < 11 ? dsp_delay + 1 : dsp_delay;
 		  if( dsp_delay == 10){
 			  // 1s gewartet nach power up
-			  if(TDA7719_begin(hi2c1) < 0)
-				  FAIL = 1;
+			  // Endstufen einschalten
+			  HAL_GPIO_WritePin(MUTE_AMP1_GPIO_Port,MUTE_AMP1_Pin, GPIO_PIN_RESET);
+			  HAL_GPIO_WritePin(STBY_AMP1_GPIO_Port,STBY_AMP1_Pin, GPIO_PIN_SET);
+			  HAL_GPIO_WritePin(MUTE_AMP2_GPIO_Port,MUTE_AMP2_Pin, GPIO_PIN_RESET);
+			  HAL_GPIO_WritePin(STBY_AMP2_GPIO_Port,STBY_AMP2_Pin, GPIO_PIN_SET);
+			  TDA7719_begin(hi2c1);
+			  TDA7719_volume((int8_t)gain);
+			  TDA7719_bass((int8_t)bass);
+			  TDA7719_middle((int8_t)middle);
+			  TDA7719_treble((int8_t)treble);
+
 		  }
 		  power_rise = HAL_GPIO_ReadPin(POWER_GPIO_Port,POWER_Pin);
 		  if(power_rise == 0) dsp_delay = 0;
 
+		  // Splash screen -  Moin Digga!
+		  splash_sceen=splash_sceen <= 100 ? splash_sceen + 1 : splash_sceen;
+		  if(splash_sceen== 100){
+#if DISPLAY == 1
+			  write_screen(bass, middle, treble, pack_voltage);
+#endif
+		  }
+
+		  gain = ADC_buffer[GAIN]/GAIN_STEPS;
+		  if(old_gain != gain && ((ADC_buffer[GAIN]%GAIN_STEPS) > GAIN_HYST) && (splash_sceen > 100)){
+			  old_gain = gain;
+			  TDA7719_volume((int8_t)gain);
+#if DISPLAY == 1
+			  write_screen(bass, middle, treble, pack_voltage);
+#endif
+		  }
+
+		  bass = ADC_buffer[BASS]/GAIN_STEPS;
+		  if(old_bass != bass && ((ADC_buffer[BASS]%GAIN_STEPS) > GAIN_HYST) && (splash_sceen > 100)){
+			  old_bass = bass;
+			  TDA7719_bass((int8_t)bass);
+#if DISPLAY == 1
+			  write_screen(bass, middle, treble, pack_voltage);
+#endif
+		  }
+
+		  middle = ADC_buffer[MIDDLE]/GAIN_STEPS;
+		  if(old_middle != middle && ((ADC_buffer[MIDDLE]%GAIN_STEPS) > GAIN_HYST) && (splash_sceen > 100)){
+			  old_middle = middle;
+			  TDA7719_middle((int8_t)middle);
+#if DISPLAY == 1
+			  write_screen(bass, middle, treble, pack_voltage);
+#endif
+		  }
+
+		  treble = ADC_buffer[TREBLE]/GAIN_STEPS;
+		  if(old_treble != treble && ((ADC_buffer[TREBLE]%GAIN_STEPS) > GAIN_HYST) && (splash_sceen > 100)){
+			  old_treble = treble;
+			  TDA7719_treble((int8_t)treble);
+#if DISPLAY == 1
+			  write_screen(bass, middle, treble, pack_voltage);
+#endif
+		  }
 
 	  }
 
@@ -813,7 +921,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim){
   * @brief  This function is executed in case of error occurrence.
   * @retval None
   */
-void Error_Handler(void)
+void Error_Handler()
 {
   /* USER CODE BEGIN Error_Handler_Debug */
   /* User can add his own implementation to report the HAL error return state */

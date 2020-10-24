@@ -114,6 +114,23 @@
 #define VOLUME_OUTPUT_GAIN	6
 #define VOLUME_SOFT_STEP 7
 
+// 0x0B
+#define BASS_Q_1	5
+#define BASS_Q_2	6
+#define BASS_SOFT_STEP 7
+
+// 0x0A
+#define MIDDLE_Q_1	5
+#define MIDDLE_Q_2	6
+#define MIDDLE_SOFT_STEP 7
+
+// 0x09
+#define TREBLE_Q_1	5
+#define TREBLE_Q_2	6
+#define TREBLE_SOFT_STEP 7
+
+
+
 
 
 // Input channels definitions

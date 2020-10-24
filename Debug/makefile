@@ -40,8 +40,8 @@ MukkeBox_STM32F030C6.bin \
 all: MukkeBox_STM32F030C6.elf secondary-outputs
 
 # Tool invocations
-MukkeBox_STM32F030C6.elf: $(OBJS) $(USER_OBJS) C:\Users\niko.krofta\STM32CubeIDE\workspace_1.2.0\MukkeBox_STM32F030C6\STM32F030C6TX_FLASH.ld
-	arm-none-eabi-gcc -o "MukkeBox_STM32F030C6.elf" @"objects.list" $(USER_OBJS) $(LIBS) -mcpu=cortex-m0 -T"C:\Users\niko.krofta\STM32CubeIDE\workspace_1.2.0\MukkeBox_STM32F030C6\STM32F030C6TX_FLASH.ld" --specs=nosys.specs -Wl,-Map="MukkeBox_STM32F030C6.map" -Wl,--gc-sections -static --specs=nano.specs -mfloat-abi=soft -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
+MukkeBox_STM32F030C6.elf: $(OBJS) $(USER_OBJS) /home/niko/STM32CubeIDE/workspace_1.3.0/MukkeBox_STM32F030C6/STM32F030C6TX_FLASH.ld
+	arm-none-eabi-gcc -o "MukkeBox_STM32F030C6.elf" @"objects.list" $(USER_OBJS) $(LIBS) -mcpu=cortex-m0 -T"/home/niko/STM32CubeIDE/workspace_1.3.0/MukkeBox_STM32F030C6/STM32F030C6TX_FLASH.ld" --specs=nosys.specs -Wl,-Map="MukkeBox_STM32F030C6.map" -Wl,--gc-sections -static --specs=nano.specs -mfloat-abi=soft -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
 	@echo 'Finished building target: $@'
 	@echo ' '
 

@@ -1,3 +1,7 @@
 TDA7719.c:13:5:TDA7719_begin	40	static
 TDA7719.c:50:5:TDA7719_mainSource	16	static
 TDA7719.c:59:5:TDA7719_write_register	40	static
+TDA7719.c:67:5:TDA7719_volume	24	static
+TDA7719.c:84:5:TDA7719_bass	24	static
+TDA7719.c:101:5:TDA7719_middle	24	static
+TDA7719.c:118:5:TDA7719_treble	24	static

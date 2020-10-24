@@ -5,7 +5,10 @@ extern int TDA7719_begin(I2C_HandleTypeDef dev);
 
 extern int TDA7719_mainSource(char _source);
 extern int TDA7719_write_register(char _register);
-extern int TDA7719_volume(uint8_t _volume);
+extern int TDA7719_volume(int8_t _volume);
+extern int TDA7719_bass(int8_t _value);
+extern int TDA7719_middle(int8_t _value);
+extern int TDA7719_treble(int8_t _value);
 /*
 int TDA7719_inputGain(byte _value);
 int TDA7719_diffinMode(byte _mode);

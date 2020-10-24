@@ -13,25 +13,25 @@ I2C_HandleTypeDef i2c;
 int TDA7719_begin(I2C_HandleTypeDef dev) {
 	i2c = dev;
 	TDA7418_register_data[REG_SOURCE_SEL ] 	= 0b11100011;
-	TDA7418_register_data[REG_2SOURCE_SEL] 	= 0b11111011;
-	TDA7418_register_data[REG_MIX_SOURCE ] 	= 0b00111111;
-	TDA7418_register_data[REG_LEVELMETER ] 	= 0b00111111;
-	TDA7418_register_data[REG_SOFTMUTE   ] 	= 0b11010011;
+	TDA7418_register_data[REG_2SOURCE_SEL] 	= 0b11101111;
+	TDA7418_register_data[REG_MIX_SOURCE ] 	= 0b11111111;
+	TDA7418_register_data[REG_LEVELMETER ] 	= 0b00011111;
+	TDA7418_register_data[REG_SOFTMUTE   ] 	= 0b01010011;
 	TDA7418_register_data[REG_SOFT_STEP1 ] 	= 0b11111111;
 	TDA7418_register_data[REG_SOFT_STEP2 ] 	= 0b11001111;
 
 	TDA7418_register_data[REG_LOUDNESS] 	= 0b11110000;
-	TDA7418_register_data[REG_VOLUME] 		= 0b11011111;
-	TDA7418_register_data[REG_TREBLE] 		= 0b11111111;
+	TDA7418_register_data[REG_VOLUME] 		= 0b11000000; //-15dB
+	TDA7418_register_data[REG_TREBLE] 		= 0b10011111;
 	TDA7418_register_data[REG_MIDDLE] 		= 0b11111111;
-	TDA7418_register_data[REG_BASS] 		= 0b11110000;	// +15dB
+	TDA7418_register_data[REG_BASS] 		= 0b10011111;	// 0dB
 	TDA7418_register_data[REG_MID_BAS_FC] 	= 0b11111111;
 	TDA7418_register_data[REG_SPK_ATT_LF] 	= 0b10000000;	// 0dB
-	TDA7418_register_data[REG_SPK_ATT_RF] 	= 0b10000000;	// 0dB
-	TDA7418_register_data[REG_SPK_ATT_LR] 	= 0b11100000;	// Mute
-	TDA7418_register_data[REG_SPK_ATT_RR] 	= 0b11100000;	// Mute
-	TDA7418_register_data[REG_SPK_ATT_SUBL] = 0b10000000;	// 0dB
-	TDA7418_register_data[REG_SPK_ATT_SUBR] = 0b10000000;	// 0dB
+	TDA7418_register_data[REG_SPK_ATT_RF] 	= 0b10010100;	// -20dB
+	TDA7418_register_data[REG_SPK_ATT_LR] 	= 0b11000000;	// Mute
+	TDA7418_register_data[REG_SPK_ATT_RR] 	= 0b11000000;	// Mute
+	TDA7418_register_data[REG_SPK_ATT_SUBL] = 0b10010100; // 0b11000000;//	// -20dB
+	TDA7418_register_data[REG_SPK_ATT_SUBR] = 0b10010100;//0b11000000;	// -20dB
 
 	  char data[2] = {0,0};
 	  HAL_StatusTypeDef ret;
@@ -63,21 +63,77 @@ int TDA7719_write_register(char _register) {
 	ret = HAL_I2C_Master_Transmit(&i2c, TDA_ADDR, &data, 2, 1000);
     return ret;
 }
-/*
+
 int TDA7719_volume(int8_t _volume) {
 	HAL_StatusTypeDef ret;
-	if((_volume > 15) || (_volume < -15))
+	if((_volume < 0) || (_volume > 30))
 		return -1;
-
+	_volume -= 15;
 	TDA7418_register_data[REG_VOLUME] = (1 << VOLUME_OUTPUT_GAIN) | (1 << VOLUME_SOFT_STEP);
-	if(_volume > 0 )
+	if(_volume > 0 ){
 		TDA7418_register_data[REG_VOLUME] |= (1<<4);	// Vorzeichen Bit
-
-	TDA7418_register_data[REG_VOLUME] +=
+		TDA7418_register_data[REG_VOLUME] |= (0x0F & ( 15 - _volume));
+	}
+	else{
+		TDA7418_register_data[REG_VOLUME] |= (0x0F & ( 15 + _volume));
+	}
 	ret = TDA7719_write_register(REG_VOLUME);
 	return ret;
 }
 
+int TDA7719_bass(int8_t _volume){
+	HAL_StatusTypeDef ret;
+	if((_volume < 0) || (_volume > 30))
+		return -1;
+	_volume -= 15;
+	TDA7418_register_data[REG_BASS] = (0 << BASS_Q_1) | (0 << BASS_Q_2) | (1<<BASS_SOFT_STEP);
+	if(_volume > 0 ){
+		TDA7418_register_data[REG_BASS] |= (1<<4);	// Vorzeichen Bit
+		TDA7418_register_data[REG_BASS] |= (0x0F & ( 15 - _volume));
+	}
+	else{
+		TDA7418_register_data[REG_BASS] |= (0x0F & ( 15 + _volume));
+	}
+	ret = TDA7719_write_register(REG_BASS);
+	return ret;
+}
+
+int TDA7719_middle(int8_t _volume){
+	HAL_StatusTypeDef ret;
+	if((_volume < 0) || (_volume > 30))
+		return -1;
+	_volume -= 15;
+	TDA7418_register_data[REG_MIDDLE] = (1 << MIDDLE_Q_1) | (1 << MIDDLE_Q_2) | (1<<MIDDLE_SOFT_STEP);
+	if(_volume > 0 ){
+		TDA7418_register_data[REG_MIDDLE] |= (1<<4);	// Vorzeichen Bit
+		TDA7418_register_data[REG_MIDDLE] |= (0x0F & ( 15 - _volume));
+	}
+	else{
+		TDA7418_register_data[REG_MIDDLE] |= (0x0F & ( 15 + _volume));
+	}
+	ret = TDA7719_write_register(REG_MIDDLE);
+	return ret;
+}
+
+int TDA7719_treble(int8_t _volume){
+	HAL_StatusTypeDef ret;
+	if((_volume < 0) || (_volume > 30))
+		return -1;
+	_volume -= 15;
+	TDA7418_register_data[REG_TREBLE] = (1 << TREBLE_Q_1) | (1 << TREBLE_Q_2) | (1<<TREBLE_SOFT_STEP);
+	if(_volume > 0 ){
+		TDA7418_register_data[REG_TREBLE] |= (1<<4);	// Vorzeichen Bit
+		TDA7418_register_data[REG_TREBLE] |= (0x0F & ( 15 - _volume));
+	}
+	else{
+		TDA7418_register_data[REG_TREBLE] |= (0x0F & ( 15 + _volume));
+	}
+	ret = TDA7719_write_register(REG_TREBLE);
+	return ret;
+}
+
+
+/*
 int TDA7719_attenuator(char _value) {
     byte _set_att;
 
